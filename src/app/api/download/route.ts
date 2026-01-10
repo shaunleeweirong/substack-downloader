@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
           status: 'fetching',
         });
 
-        const posts = await fetchAllPosts(subdomain, (current, total, title) => {
+        const posts = await fetchAllPosts(publication.baseUrl, (current, total, title) => {
           const fetchProgress = 10 + (current / total) * 30; // 10-40%
           sendProgress({
             currentPost: title,

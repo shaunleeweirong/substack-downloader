@@ -23,6 +23,7 @@ export interface SubstackPublication {
   description?: string;
   author?: string;
   url: string;
+  baseUrl: string; // The actual API base URL (may differ from url if redirected)
   hasPaidContent: boolean;
 }
 
