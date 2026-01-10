@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { DownloadProgress } from '@/lib/substack/types';
 
 interface UseDownloadResult {
@@ -16,6 +16,16 @@ interface UseDownloadResult {
   reset: () => void;
 }
 
+function base64ToBlob(base64: string, mimeType: string = 'application/zip'): Blob {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+}
+
 export function useDownload(): UseDownloadResult {
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [zipBlob, setZipBlob] = useState<Blob | null>(null);
@@ -24,7 +34,7 @@ export function useDownload(): UseDownloadResult {
   const [isLoading, setIsLoading] = useState(false);
   const [hasPaidContent, setHasPaidContent] = useState(false);
   const [publicationName, setPublicationName] = useState('');
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
     setProgress(null);
@@ -37,23 +47,22 @@ export function useDownload(): UseDownloadResult {
   }, []);
 
   const cancel = useCallback(() => {
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
     setIsLoading(false);
     setProgress(null);
-  }, [abortController]);
+  }, []);
 
   const startDownload = useCallback(async (url: string) => {
     reset();
     setIsLoading(true);
 
     const controller = new AbortController();
-    setAbortController(controller);
+    abortControllerRef.current = controller;
 
     try {
-      // Start the download request
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,55 +71,81 @@ export function useDownload(): UseDownloadResult {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Download failed');
+        throw new Error('Failed to start download');
       }
 
-      // Check for paid content header
-      const paidContentHeader = response.headers.get('X-Has-Paid-Content');
-      const pubNameHeader = response.headers.get('X-Publication-Name');
-      const filenameHeader = response.headers.get('X-Filename');
-
-      if (paidContentHeader === 'true') {
-        setHasPaidContent(true);
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
       }
 
-      if (pubNameHeader) {
-        setPublicationName(pubNameHeader);
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events from buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6)) as DownloadProgress;
+              setProgress(data);
+
+              // Handle completion
+              if (data.status === 'complete') {
+                if (data.zipData) {
+                  const blob = base64ToBlob(data.zipData);
+                  setZipBlob(blob);
+                }
+                if (data.filename) {
+                  setFilename(data.filename);
+                }
+                if (data.publicationName) {
+                  setPublicationName(data.publicationName);
+                }
+                if (data.hasPaidContent) {
+                  setHasPaidContent(true);
+                }
+              }
+
+              // Handle error
+              if (data.status === 'error' && data.error) {
+                setError(data.error);
+              }
+            } catch {
+              // Ignore JSON parse errors
+            }
+          }
+        }
       }
-
-      if (filenameHeader) {
-        setFilename(filenameHeader);
-      }
-
-      // Read the response as a blob
-      const blob = await response.blob();
-      setZipBlob(blob);
-
-      setProgress({
-        currentPost: '',
-        processedPosts: 0,
-        totalPosts: 0,
-        percentage: 100,
-        status: 'complete',
-      });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         // Request was cancelled
         return;
       }
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      setError(errorMessage);
       setProgress({
         currentPost: '',
         processedPosts: 0,
         totalPosts: 0,
         percentage: 0,
         status: 'error',
-        error: err instanceof Error ? err.message : 'An unexpected error occurred',
+        error: errorMessage,
       });
     } finally {
       setIsLoading(false);
-      setAbortController(null);
+      abortControllerRef.current = null;
     }
   }, [reset]);
 

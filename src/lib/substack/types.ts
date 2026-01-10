@@ -40,6 +40,11 @@ export interface DownloadProgress {
   percentage: number;
   status: 'fetching' | 'processing' | 'downloading-images' | 'creating-zip' | 'complete' | 'error';
   error?: string;
+  // SSE response fields
+  zipData?: string; // Base64-encoded ZIP data (sent on complete)
+  filename?: string;
+  publicationName?: string;
+  hasPaidContent?: boolean;
 }
 
 export interface ProcessedPost {
