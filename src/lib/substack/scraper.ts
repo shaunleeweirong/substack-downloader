@@ -242,7 +242,7 @@ async function fetchArchiveFromHtml(baseUrl: string): Promise<PostListItem[]> {
   return posts;
 }
 
-export async function fetchPostContent(postUrl: string): Promise<SubstackPost> {
+export async function fetchPostContent(postUrl: string, publishedAt?: string): Promise<SubstackPost> {
   const response = await rateLimiter.fetch(postUrl, {
     headers: { 'User-Agent': USER_AGENT },
   });
@@ -266,8 +266,9 @@ export async function fetchPostContent(postUrl: string): Promise<SubstackPost> {
                  $('.author-name').text().trim() ||
                  'Unknown';
 
-  // Extract date
-  const dateStr = $('time').attr('datetime') ||
+  // Extract date (prefer passed date from archive API)
+  const dateStr = publishedAt ||
+                  $('time').attr('datetime') ||
                   $('meta[property="article:published_time"]').attr('content') ||
                   new Date().toISOString();
 
@@ -325,7 +326,7 @@ export async function fetchAllPosts(
     }
 
     try {
-      const post = await fetchPostContent(item.url);
+      const post = await fetchPostContent(item.url, item.publishedAt);
       posts.push(post);
     } catch (error) {
       console.error(`Failed to fetch post: ${item.title}`, error);

@@ -21,7 +21,7 @@ export function generateImageFilename(
   extension: string
 ): string {
   const dateStr = postDate.substring(0, 10);
-  return `${dateStr}-${postSlug}-image-${imageIndex + 1}.${extension}`;
+  return `${dateStr}-${postSlug}/image-${imageIndex + 1}.${extension}`;
 }
 
 export function getExtensionFromUrl(url: string): string {
