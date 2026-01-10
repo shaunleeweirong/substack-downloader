@@ -9,6 +9,8 @@ import { DownloadProgress } from '@/lib/substack/types';
 
 const requestSchema = z.object({
   url: z.string().url(),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
       try {
         // Parse and validate request
         const body = await request.json();
-        const { url } = requestSchema.parse(body);
+        const { url, startDate, endDate } = requestSchema.parse(body);
 
         if (!isValidSubstackUrl(url)) {
           sendError('Invalid Substack URL');
@@ -73,16 +75,20 @@ export async function POST(request: NextRequest) {
           status: 'fetching',
         });
 
-        const posts = await fetchAllPosts(publication.baseUrl, (current, total, title) => {
-          const fetchProgress = 10 + (current / total) * 30; // 10-40%
-          sendProgress({
-            currentPost: title,
-            processedPosts: current,
-            totalPosts: total,
-            percentage: Math.round(fetchProgress),
-            status: 'fetching',
-          });
-        });
+        const posts = await fetchAllPosts(
+          publication.baseUrl,
+          { startDate: startDate || null, endDate: endDate || null },
+          (current, total, title) => {
+            const fetchProgress = 10 + (current / total) * 30; // 10-40%
+            sendProgress({
+              currentPost: title,
+              processedPosts: current,
+              totalPosts: total,
+              percentage: Math.round(fetchProgress),
+              status: 'fetching',
+            });
+          }
+        );
 
         if (posts.length === 0) {
           sendError('No posts found in this publication');

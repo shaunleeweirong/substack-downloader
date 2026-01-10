@@ -1,6 +1,8 @@
 'use client';
 
+import { useState, useCallback } from 'react';
 import { UrlInput } from '@/components/url-input';
+import { DateRangeFilter, DateRange } from '@/components/date-range-filter';
 import { ProgressBar } from '@/components/progress-bar';
 import { DownloadButton } from '@/components/download-button';
 import { ErrorMessage } from '@/components/error-message';
@@ -21,8 +23,14 @@ export default function Home() {
     reset,
   } = useDownload();
 
+  const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null });
+
+  const handleDateRangeChange = useCallback((range: DateRange) => {
+    setDateRange(range);
+  }, []);
+
   const handleSubmit = (url: string) => {
-    startDownload(url);
+    startDownload(url, dateRange);
   };
 
   return (
@@ -43,6 +51,12 @@ export default function Home() {
           onSubmit={handleSubmit}
           isLoading={isLoading}
           disabled={!!zipBlob}
+        />
+
+        {/* Date Range Filter */}
+        <DateRangeFilter
+          onChange={handleDateRangeChange}
+          disabled={isLoading || !!zipBlob}
         />
 
         {/* Paid Content Notice */}

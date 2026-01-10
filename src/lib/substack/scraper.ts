@@ -14,6 +14,11 @@ interface PostListItem {
   isPaid: boolean;
 }
 
+interface DateRange {
+  startDate: string | null;
+  endDate: string | null;
+}
+
 /**
  * Resolves the actual base URL for a Substack publication by following redirects.
  * Some publications have custom domains or redirect to profile URLs.
@@ -313,16 +318,28 @@ export async function fetchPostContent(postUrl: string, publishedAt?: string): P
 
 export async function fetchAllPosts(
   baseUrl: string,
+  dateRange?: DateRange,
   onProgress?: (current: number, total: number, title: string) => void
 ): Promise<SubstackPost[]> {
   const postList = await fetchArchivePostList(baseUrl);
+
+  // Filter posts by date range if specified
+  const filteredPostList = postList.filter(post => {
+    if (!dateRange?.startDate && !dateRange?.endDate) return true;
+
+    const postDate = new Date(post.publishedAt);
+    if (dateRange.startDate && postDate < new Date(dateRange.startDate)) return false;
+    if (dateRange.endDate && postDate > new Date(dateRange.endDate + 'T23:59:59')) return false;
+    return true;
+  });
+
   const posts: SubstackPost[] = [];
 
-  for (let i = 0; i < postList.length; i++) {
-    const item = postList[i];
+  for (let i = 0; i < filteredPostList.length; i++) {
+    const item = filteredPostList[i];
 
     if (onProgress) {
-      onProgress(i + 1, postList.length, item.title);
+      onProgress(i + 1, filteredPostList.length, item.title);
     }
 
     try {

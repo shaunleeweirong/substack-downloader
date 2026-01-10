@@ -3,6 +3,11 @@
 import { useState, useCallback, useRef } from 'react';
 import { DownloadProgress } from '@/lib/substack/types';
 
+interface DateRange {
+  startDate: string | null;
+  endDate: string | null;
+}
+
 interface UseDownloadResult {
   progress: DownloadProgress | null;
   zipBlob: Blob | null;
@@ -11,7 +16,7 @@ interface UseDownloadResult {
   isLoading: boolean;
   hasPaidContent: boolean;
   publicationName: string;
-  startDownload: (url: string) => Promise<void>;
+  startDownload: (url: string, dateRange?: DateRange) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -55,7 +60,7 @@ export function useDownload(): UseDownloadResult {
     setProgress(null);
   }, []);
 
-  const startDownload = useCallback(async (url: string) => {
+  const startDownload = useCallback(async (url: string, dateRange?: DateRange) => {
     reset();
     setIsLoading(true);
 
@@ -66,7 +71,11 @@ export function useDownload(): UseDownloadResult {
       const response = await fetch('/api/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({
+          url,
+          startDate: dateRange?.startDate || null,
+          endDate: dateRange?.endDate || null,
+        }),
         signal: controller.signal,
       });
 
