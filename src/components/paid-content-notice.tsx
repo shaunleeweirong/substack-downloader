@@ -39,13 +39,13 @@ export function PaidContentNotice({ publicationName, onDismiss }: PaidContentNot
               >
                 Sign in to Substack
               </a>
-              {' '}in your browser
+              {' '}in your browser with your subscription
             </li>
-            <li>Verify you have an active subscription to this publication</li>
-            <li>Return here and try downloading again</li>
+            <li>Expand &quot;Have a paid subscription?&quot; above and use the bookmarklet</li>
+            <li>Paste the cookie and try downloading again</li>
           </ol>
           <p className="mt-3 text-xs text-amber-600 dark:text-amber-500">
-            Free posts will still be downloaded. Paid posts require a valid subscription.
+            Without authentication, only free posts and previews of paid posts will be downloaded.
           </p>
           {onDismiss && (
             <button

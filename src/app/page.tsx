@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { UrlInput } from '@/components/url-input';
 import { DateRangeFilter, DateRange } from '@/components/date-range-filter';
+import { CookieInput } from '@/components/cookie-input';
 import { ProgressBar } from '@/components/progress-bar';
 import { DownloadButton } from '@/components/download-button';
 import { ErrorMessage } from '@/components/error-message';
@@ -24,13 +25,14 @@ export default function Home() {
   } = useDownload();
 
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null });
+  const [authCookie, setAuthCookie] = useState('');
 
   const handleDateRangeChange = useCallback((range: DateRange) => {
     setDateRange(range);
   }, []);
 
   const handleSubmit = (url: string) => {
-    startDownload(url, dateRange);
+    startDownload(url, dateRange, authCookie || undefined);
   };
 
   return (
@@ -56,6 +58,13 @@ export default function Home() {
         {/* Date Range Filter */}
         <DateRangeFilter
           onChange={handleDateRangeChange}
+          disabled={isLoading || !!zipBlob}
+        />
+
+        {/* Cookie Input for Paid Content */}
+        <CookieInput
+          value={authCookie}
+          onChange={setAuthCookie}
           disabled={isLoading || !!zipBlob}
         />
 

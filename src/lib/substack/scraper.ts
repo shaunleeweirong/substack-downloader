@@ -6,6 +6,134 @@ import { generateSlug } from '../utils/slug';
 
 const rateLimiter = new RateLimiter();
 
+/**
+ * Check if the cookie is for a custom domain (connect.sid) vs substack.com (substack.sid)
+ */
+function isCustomDomainCookie(cookie: string): boolean {
+  return cookie.includes('connect.sid=');
+}
+
+/**
+ * Build headers for Substack requests, optionally including auth cookie.
+ * authCookie should be the full cookie string (e.g., "substack.sid=xxx; substack.lli=yyy")
+ */
+function buildHeaders(authCookie?: string, forApi = false, subdomain?: string): HeadersInit {
+  const headers: HeadersInit = { 'User-Agent': USER_AGENT };
+
+  // For API requests, explicitly request JSON (matches Python library behavior)
+  if (forApi) {
+    headers['Accept'] = 'application/json';
+    headers['Content-Type'] = 'application/json';
+
+    // Add browser-like headers that might be checked for authentication
+    if (subdomain) {
+      const origin = `https://${subdomain}.substack.com`;
+      headers['Origin'] = origin;
+      headers['Referer'] = `${origin}/`;
+      // Sec-Fetch headers that browsers send
+      headers['Sec-Fetch-Dest'] = 'empty';
+      headers['Sec-Fetch-Mode'] = 'cors';
+      headers['Sec-Fetch-Site'] = 'same-origin';
+    }
+  }
+
+  if (authCookie) {
+    // URL-decode the cookie value in case user copied encoded version from DevTools
+    // e.g., "s%3Axxx" should be "s:xxx"
+    let decodedCookie = authCookie;
+    try {
+      decodedCookie = decodeURIComponent(authCookie);
+    } catch {
+      // If decoding fails, use original value
+    }
+    headers['Cookie'] = decodedCookie;
+  }
+  return headers;
+}
+
+/**
+ * Verify if the auth cookie is valid by comparing API responses with/without cookie.
+ * If they're identical, the cookie isn't being recognized.
+ * @param authCookie - The cookie string
+ * @param baseUrl - The base URL to test against (custom domain or subdomain.substack.com)
+ * @param subdomain - The subdomain (used for fallback if baseUrl verification fails)
+ */
+async function verifyAuthCookie(authCookie: string, baseUrl: string, subdomain: string): Promise<{ valid: boolean; message: string }> {
+  try {
+    // Determine the correct URL to verify against based on cookie type
+    const testBaseUrl = isCustomDomainCookie(authCookie)
+      ? baseUrl  // Custom domain cookie (connect.sid)
+      : `https://${subdomain}.substack.com`;  // Substack cookie (substack.sid)
+
+    const testUrl = `${testBaseUrl}/api/v1/archive?limit=1`;
+
+    // Fetch WITH cookie
+    const withCookie = await fetch(testUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json',
+        'Cookie': authCookie,
+      },
+    });
+
+    // Fetch WITHOUT cookie
+    const withoutCookie = await fetch(testUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!withCookie.ok || !withoutCookie.ok) {
+      return { valid: false, message: 'Could not verify cookie' };
+    }
+
+    const dataWith = await withCookie.json();
+    const dataWithout = await withoutCookie.json();
+
+    // Compare responses - if identical, cookie isn't being recognized
+    const responseWithStr = JSON.stringify(dataWith);
+    const responseWithoutStr = JSON.stringify(dataWithout);
+
+    if (responseWithStr === responseWithoutStr) {
+      console.log('[Auth] Cookie not recognized - may be expired or invalid');
+      return {
+        valid: false,
+        message: 'Cookie is not being recognized by Substack. Please get a fresh cookie from your browser while logged in.',
+      };
+    }
+
+    console.log('[Auth] Cookie verified successfully');
+    return { valid: true, message: 'Cookie appears valid' };
+  } catch (error) {
+    console.error('[Auth Verify] Error verifying cookie:', error);
+    return { valid: false, message: 'Error verifying cookie' };
+  }
+}
+
+/**
+ * Extract images from HTML content
+ */
+function extractImagesFromHtml(html: string): SubstackPost['images'] {
+  const $ = cheerio.load(html);
+  const images: SubstackPost['images'] = [];
+
+  $('img').each((_, img) => {
+    const src = $(img).attr('src');
+    const alt = $(img).attr('alt') || '';
+
+    if (src && !src.includes('substackcdn.com/image/fetch/w_')) {
+      images.push({
+        originalUrl: src,
+        localPath: '',
+        altText: alt,
+      });
+    }
+  });
+
+  return images;
+}
+
 interface PostListItem {
   url: string;
   slug: string;
@@ -24,7 +152,7 @@ interface DateRange {
  * Some publications have custom domains or redirect to profile URLs.
  * If redirected to a profile page, extracts the custom domain from page content.
  */
-async function resolveBaseUrl(subdomain: string): Promise<string> {
+async function resolveBaseUrl(subdomain: string, authCookie?: string): Promise<string> {
   const initialUrl = `https://${subdomain}.substack.com`;
 
   try {
@@ -32,7 +160,7 @@ async function resolveBaseUrl(subdomain: string): Promise<string> {
     const response = await fetch(initialUrl, {
       method: 'GET',
       redirect: 'follow',
-      headers: { 'User-Agent': USER_AGENT },
+      headers: buildHeaders(authCookie),
     });
 
     const finalUrl = response.url;
@@ -56,7 +184,7 @@ async function resolveBaseUrl(subdomain: string): Promise<string> {
         // Verify this URL has a working API
         try {
           const testResponse = await fetch(`${customBaseUrl}/api/v1/archive?limit=1`, {
-            headers: { 'User-Agent': USER_AGENT },
+            headers: buildHeaders(authCookie),
           });
           const contentType = testResponse.headers.get('content-type') || '';
           if (testResponse.ok && contentType.includes('application/json')) {
@@ -71,7 +199,7 @@ async function resolveBaseUrl(subdomain: string): Promise<string> {
       // Some profile pages still have working subdomain APIs
       try {
         const testResponse = await fetch(`${initialUrl}/api/v1/archive?limit=1`, {
-          headers: { 'User-Agent': USER_AGENT },
+          headers: buildHeaders(authCookie),
         });
         const contentType = testResponse.headers.get('content-type') || '';
         if (testResponse.ok && contentType.includes('application/json')) {
@@ -93,13 +221,13 @@ async function resolveBaseUrl(subdomain: string): Promise<string> {
   }
 }
 
-export async function fetchPublicationInfo(subdomain: string): Promise<SubstackPublication> {
+export async function fetchPublicationInfo(subdomain: string, authCookie?: string): Promise<SubstackPublication> {
   // First, resolve the actual base URL (handles custom domains and redirects)
-  const baseUrl = await resolveBaseUrl(subdomain);
+  const baseUrl = await resolveBaseUrl(subdomain, authCookie);
   const initialUrl = `https://${subdomain}.substack.com`;
 
   const response = await rateLimiter.fetch(baseUrl, {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: buildHeaders(authCookie),
   });
 
   if (!response.ok) {
@@ -135,7 +263,7 @@ export async function fetchPublicationInfo(subdomain: string): Promise<SubstackP
   };
 }
 
-export async function fetchArchivePostList(baseUrl: string): Promise<PostListItem[]> {
+export async function fetchArchivePostList(baseUrl: string, authCookie?: string): Promise<PostListItem[]> {
   const posts: PostListItem[] = [];
   let offset = 0;
   const limit = 12;
@@ -145,13 +273,13 @@ export async function fetchArchivePostList(baseUrl: string): Promise<PostListIte
     const archiveUrl = `${baseUrl}/api/v1/archive?sort=new&search=&offset=${offset}&limit=${limit}`;
 
     const response = await rateLimiter.fetch(archiveUrl, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers: buildHeaders(authCookie, true), // forApi = true
     });
 
     if (!response.ok) {
       // Try fallback to HTML scraping if API fails
       if (offset === 0) {
-        return await fetchArchiveFromHtml(baseUrl);
+        return await fetchArchiveFromHtml(baseUrl, authCookie);
       }
       break;
     }
@@ -160,7 +288,7 @@ export async function fetchArchivePostList(baseUrl: string): Promise<PostListIte
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       if (offset === 0) {
-        return await fetchArchiveFromHtml(baseUrl);
+        return await fetchArchiveFromHtml(baseUrl, authCookie);
       }
       break;
     }
@@ -192,12 +320,12 @@ export async function fetchArchivePostList(baseUrl: string): Promise<PostListIte
   return posts;
 }
 
-async function fetchArchiveFromHtml(baseUrl: string): Promise<PostListItem[]> {
+async function fetchArchiveFromHtml(baseUrl: string, authCookie?: string): Promise<PostListItem[]> {
   const posts: PostListItem[] = [];
   const archiveUrl = `${baseUrl}/archive`;
 
   const response = await rateLimiter.fetch(archiveUrl, {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: buildHeaders(authCookie),
   });
 
   if (!response.ok) {
@@ -247,10 +375,106 @@ async function fetchArchiveFromHtml(baseUrl: string): Promise<PostListItem[]> {
   return posts;
 }
 
-export async function fetchPostContent(postUrl: string, publishedAt?: string): Promise<SubstackPost> {
+/**
+ * Fetch post content using the JSON API (preferred method for paid content)
+ * @param subdomain - The original subdomain (used to construct substack.com URL for authenticated requests)
+ */
+export async function fetchPostContent(
+  postUrl: string,
+  publishedAt?: string,
+  authCookie?: string,
+  subdomain?: string
+): Promise<SubstackPost> {
+  // Extract base URL and slug from post URL
+  const url = new URL(postUrl);
+  const slug = url.pathname.split('/p/')[1]?.split('?')[0];
+
+  if (!slug) {
+    console.log(`[Fetch] No slug found in URL, falling back to HTML scraping`);
+    return fetchPostContentFromHtml(postUrl, publishedAt, authCookie);
+  }
+
+  // Determine API base URL based on cookie type
+  // - connect.sid = custom domain cookie, use the post's actual domain
+  // - substack.sid = substack.com cookie, use subdomain.substack.com
+  let apiBaseUrl = `${url.protocol}//${url.host}`;
+  if (authCookie) {
+    if (isCustomDomainCookie(authCookie)) {
+      // Custom domain cookie (connect.sid) - use the post's domain
+    } else if (subdomain) {
+      // Substack cookie (substack.sid) - use subdomain.substack.com
+      apiBaseUrl = `https://${subdomain}.substack.com`;
+    }
+  }
+
+  // Use JSON API endpoint
+  const apiUrl = `${apiBaseUrl}/api/v1/posts/${slug}`;
+
+  try {
+    const response = await rateLimiter.fetch(apiUrl, {
+      headers: buildHeaders(authCookie, true, subdomain),
+    });
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type') || '';
+    if (!response.ok || !contentType.includes('application/json')) {
+      return fetchPostContentFromHtml(postUrl, publishedAt, authCookie);
+    }
+
+    const data = await response.json();
+
+    // Extract content from JSON response
+    const title = data.title || 'Untitled';
+    const subtitle = data.subtitle || '';
+    const author = data.publishedBylines?.[0]?.name || data.author?.name || 'Unknown';
+    const dateStr = publishedAt || data.post_date || new Date().toISOString();
+    const content = data.body_html || '';
+    const isPaid = data.audience === 'only_paid';
+
+    // Check if we got truncated content (API might still return preview for non-subscribers)
+    if (isPaid && content.length < 1000 && authCookie) {
+      // Try HTML fallback in case it has more content
+      try {
+        const htmlPost = await fetchPostContentFromHtml(postUrl, publishedAt, authCookie);
+        if (htmlPost.content.length > content.length) {
+          return htmlPost;
+        }
+      } catch {
+        // HTML fallback failed, use API content
+      }
+    }
+
+    // Extract images from the body_html
+    const images = extractImagesFromHtml(content);
+
+    return {
+      slug: slug || generateSlug(title),
+      title,
+      subtitle,
+      author,
+      publishedAt: dateStr,
+      url: data.canonical_url || postUrl,
+      content,
+      images,
+      isPaid,
+    };
+  } catch {
+    return fetchPostContentFromHtml(postUrl, publishedAt, authCookie);
+  }
+}
+
+/**
+ * Fallback: Fetch post content by scraping HTML page
+ */
+async function fetchPostContentFromHtml(postUrl: string, publishedAt?: string, authCookie?: string): Promise<SubstackPost> {
   const response = await rateLimiter.fetch(postUrl, {
-    headers: { 'User-Agent': USER_AGENT },
+    headers: buildHeaders(authCookie),
   });
+
+  // Check for auth errors
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Authentication failed. Your cookie may be invalid or expired.');
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch post: ${response.status}`);
@@ -277,29 +501,59 @@ export async function fetchPostContent(postUrl: string, publishedAt?: string): P
                   $('meta[property="article:published_time"]').attr('content') ||
                   new Date().toISOString();
 
-  // Extract main content
-  const contentElement = $('.body.markup, .post-content, article .available-content');
-  const content = contentElement.html() || '';
+  // Extract main content - try multiple selectors and pick the one with most content
+  // This handles both authenticated (full content) and unauthenticated (preview) cases
+  const possibleSelectors = [
+    '.body.markup',                        // Standard post body
+    '.post-content',                       // Alternative container
+    '.available-content',                  // Free/preview content
+    '.post-content-final',                 // Sometimes used for full content
+    '[data-component-name="PostBody"]',    // React component selector
+  ];
 
-  // Extract images
-  const images: SubstackPost['images'] = [];
-  contentElement.find('img').each((_, img) => {
-    const src = $(img).attr('src');
-    const alt = $(img).attr('alt') || '';
+  let content = '';
+  let bestSelector = '';
 
-    if (src && !src.includes('substackcdn.com/image/fetch/w_')) {
-      images.push({
-        originalUrl: src,
-        localPath: '', // Will be set during processing
-        altText: alt,
-      });
+  // Try selectors and pick the one with the most content
+  for (const selector of possibleSelectors) {
+    const el = $(selector);
+    if (el.length > 0) {
+      const elHtml = el.html() || '';
+      if (elHtml.length > content.length) {
+        content = elHtml;
+        bestSelector = selector;
+      }
     }
-  });
+  }
+
+  // Fallback to article body if nothing found
+  if (!content) {
+    const articleEl = $('article');
+    content = articleEl.html() || '';
+    bestSelector = 'article';
+  }
+
+  // Extract images from the best content element
+  const images: SubstackPost['images'] = [];
+  if (bestSelector) {
+    $(bestSelector).find('img').each((_, img) => {
+      const src = $(img).attr('src');
+      const alt = $(img).attr('alt') || '';
+
+      if (src && !src.includes('substackcdn.com/image/fetch/w_')) {
+        images.push({
+          originalUrl: src,
+          localPath: '', // Will be set during processing
+          altText: alt,
+        });
+      }
+    });
+  }
 
   // Check if post is paid/gated
-  const isPaid = html.includes('paywall') ||
-                 $('.paywall').length > 0 ||
-                 $('.subscribe-widget').length > 0;
+  const hasPaywall = html.includes('paywall') || $('.paywall').length > 0;
+  const hasSubscribeWidget = $('.subscribe-widget').length > 0;
+  const isPaid = hasPaywall || hasSubscribeWidget;
 
   const slug = postUrl.split('/p/')[1]?.split('?')[0] || generateSlug(title);
 
@@ -318,10 +572,21 @@ export async function fetchPostContent(postUrl: string, publishedAt?: string): P
 
 export async function fetchAllPosts(
   baseUrl: string,
+  subdomain: string,
   dateRange?: DateRange,
+  authCookie?: string,
   onProgress?: (current: number, total: number, title: string) => void
 ): Promise<SubstackPost[]> {
-  const postList = await fetchArchivePostList(baseUrl);
+  // Verify auth cookie if provided
+  if (authCookie) {
+    const decodedCookie = decodeURIComponent(authCookie);
+    const authResult = await verifyAuthCookie(decodedCookie, baseUrl, subdomain);
+    if (!authResult.valid) {
+      console.warn('[Auth] ' + authResult.message);
+    }
+  }
+
+  const postList = await fetchArchivePostList(baseUrl, authCookie);
 
   // Filter posts by date range if specified
   const filteredPostList = postList.filter(post => {
@@ -343,7 +608,8 @@ export async function fetchAllPosts(
     }
 
     try {
-      const post = await fetchPostContent(item.url, item.publishedAt);
+      // Pass subdomain for authenticated API calls to substack.com
+      const post = await fetchPostContent(item.url, item.publishedAt, authCookie, subdomain);
       posts.push(post);
     } catch (error) {
       console.error(`Failed to fetch post: ${item.title}`, error);

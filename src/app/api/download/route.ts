@@ -11,6 +11,7 @@ const requestSchema = z.object({
   url: z.string().url(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
+  authCookie: z.string().nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -42,7 +43,9 @@ export async function POST(request: NextRequest) {
       try {
         // Parse and validate request
         const body = await request.json();
-        const { url, startDate, endDate } = requestSchema.parse(body);
+        const { url, startDate, endDate, authCookie } = requestSchema.parse(body);
+
+        console.log(`[Download] Starting: ${url}${authCookie ? ' (authenticated)' : ''}`);
 
         if (!isValidSubstackUrl(url)) {
           sendError('Invalid Substack URL');
@@ -64,7 +67,8 @@ export async function POST(request: NextRequest) {
           status: 'fetching',
         });
 
-        const publication = await fetchPublicationInfo(subdomain);
+        const publication = await fetchPublicationInfo(subdomain, authCookie || undefined);
+        console.log(`[Download] Publication: ${publication.name}`);
 
         // Phase 2: Fetch all posts with progress updates
         sendProgress({
@@ -77,7 +81,9 @@ export async function POST(request: NextRequest) {
 
         const posts = await fetchAllPosts(
           publication.baseUrl,
+          subdomain,  // Pass subdomain for authenticated API calls to substack.com
           { startDate: startDate || null, endDate: endDate || null },
+          authCookie || undefined,
           (current, total, title) => {
             const fetchProgress = 10 + (current / total) * 30; // 10-40%
             sendProgress({
@@ -89,6 +95,8 @@ export async function POST(request: NextRequest) {
             });
           }
         );
+
+        console.log(`[Download] ${posts.length} posts fetched (${posts.filter(p => p.isPaid).length} paid)`);
 
         if (posts.length === 0) {
           sendError('No posts found in this publication');
@@ -115,7 +123,7 @@ export async function POST(request: NextRequest) {
           status: 'downloading-images',
         });
 
-        const images = await downloadAllPostImages(processedPosts);
+        const images = await downloadAllPostImages(processedPosts, authCookie || undefined);
 
         // Phase 5: Build ZIP archive
         sendProgress({
@@ -172,10 +180,12 @@ export async function POST(request: NextRequest) {
 
         controller.close();
       } catch (error) {
-        console.error('Download error:', error);
+        console.error('[Download] Error:', error instanceof Error ? error.message : error);
 
         if (error instanceof z.ZodError) {
           sendError('Invalid request format');
+        } else if (error instanceof Error && error.message.includes('Authentication failed')) {
+          sendError('Cookie authentication failed. Please check your cookie is valid and not expired.');
         } else {
           sendError('Failed to create archive. Please try again.');
         }

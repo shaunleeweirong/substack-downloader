@@ -16,7 +16,7 @@ interface UseDownloadResult {
   isLoading: boolean;
   hasPaidContent: boolean;
   publicationName: string;
-  startDownload: (url: string, dateRange?: DateRange) => Promise<void>;
+  startDownload: (url: string, dateRange?: DateRange, authCookie?: string) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -78,7 +78,7 @@ export function useDownload(): UseDownloadResult {
     setProgress(null);
   }, []);
 
-  const startDownload = useCallback(async (url: string, dateRange?: DateRange) => {
+  const startDownload = useCallback(async (url: string, dateRange?: DateRange, authCookie?: string) => {
     reset();
     setIsLoading(true);
 
@@ -93,6 +93,7 @@ export function useDownload(): UseDownloadResult {
           url,
           startDate: dateRange?.startDate || null,
           endDate: dateRange?.endDate || null,
+          authCookie: authCookie || null,
         }),
         signal: controller.signal,
       });

@@ -50,6 +50,9 @@ export interface DownloadProgress {
   zipChunk?: string;    // Base64 chunk data
   chunkIndex?: number;  // Current chunk (0-indexed)
   totalChunks?: number; // Total number of chunks
+  // Auth status fields
+  authError?: boolean;   // True if authentication failed
+  authWarning?: string;  // Warning message about partial auth
 }
 
 export interface ProcessedPost {

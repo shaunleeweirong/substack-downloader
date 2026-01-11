@@ -1,10 +1,13 @@
 import { PostImage } from './types';
 import { USER_AGENT, MAX_CONCURRENT_IMAGE_DOWNLOADS } from '../constants';
 
-export async function downloadImage(url: string): Promise<Buffer> {
-  const response = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-  });
+export async function downloadImage(url: string, authCookie?: string): Promise<Buffer> {
+  const headers: HeadersInit = { 'User-Agent': USER_AGENT };
+  if (authCookie) {
+    headers['Cookie'] = authCookie;
+  }
+
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
     throw new Error(`Failed to download image: ${response.status}`);
@@ -16,6 +19,7 @@ export async function downloadImage(url: string): Promise<Buffer> {
 
 export async function downloadImagesWithConcurrency(
   images: PostImage[],
+  authCookie?: string,
   onProgress?: (downloaded: number, total: number) => void
 ): Promise<PostImage[]> {
   const results: PostImage[] = [];
@@ -28,7 +32,7 @@ export async function downloadImagesWithConcurrency(
       if (!image) break;
 
       try {
-        const data = await downloadImage(image.originalUrl);
+        const data = await downloadImage(image.originalUrl, authCookie);
         results.push({ ...image, data });
       } catch (error) {
         console.error(`Failed to download image: ${image.originalUrl}`, error);
@@ -55,8 +59,12 @@ export async function downloadImagesWithConcurrency(
 
 export async function downloadAllPostImages(
   posts: Array<{ images: PostImage[] }>,
+  authCookie?: string,
   onProgress?: (postIndex: number, totalPosts: number, imageProgress: string) => void
 ): Promise<Map<string, Buffer>> {
+  const totalImages = posts.reduce((sum, p) => sum + p.images.length, 0);
+  console.log(`[Download] Downloading ${totalImages} images...`);
+
   const imageMap = new Map<string, Buffer>();
 
   for (let i = 0; i < posts.length; i++) {
@@ -66,6 +74,7 @@ export async function downloadAllPostImages(
 
     const downloadedImages = await downloadImagesWithConcurrency(
       post.images,
+      authCookie,
       (downloaded, total) => {
         if (onProgress) {
           onProgress(i, posts.length, `${downloaded}/${total}`);
@@ -80,5 +89,6 @@ export async function downloadAllPostImages(
     }
   }
 
+  console.log(`[Download] ${imageMap.size} images saved`);
   return imageMap;
 }
