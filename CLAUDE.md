@@ -104,3 +104,20 @@ Downloaded ZIP contains:
 - `metadata.json` - Structured publication data
 - `images/` - All downloaded images
 - `YYYY-MM-DD-post-slug.md` - Individual posts with YAML frontmatter
+
+---
+
+## Development History
+
+### January 2026 - Large File Download Fix
+
+**Problem**: Large publications (500+ posts like Lenny's Newsletter) failed to download because:
+1. ZIP files exceeded JavaScript's string length limit when base64 encoded as a single string
+2. Client-side `.join('')` of chunks recreated the same huge string problem
+
+**Solution implemented**:
+- **Server** (`src/app/api/download/route.ts`): Splits ZIP buffer into ~384KB chunks before base64 encoding, sends each chunk via SSE with `zipChunk`, `chunkIndex`, `totalChunks` fields
+- **Client** (`src/hooks/use-download.ts`): Added `chunksToBlob()` function that converts each base64 chunk to `Uint8Array` separately, then creates a Blob from the array of byte arrays - no string concatenation
+- **Types** (`src/lib/substack/types.ts`): Added `zipChunk`, `chunkIndex`, `totalChunks` fields to `DownloadProgress` interface
+
+**Status**: Tested and working with large publications.
