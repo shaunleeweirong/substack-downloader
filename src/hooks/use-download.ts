@@ -31,6 +31,22 @@ function base64ToBlob(base64: string, mimeType: string = 'application/zip'): Blo
   return new Blob([byteArray], { type: mimeType });
 }
 
+// Convert base64 chunks to blob without creating huge string
+function chunksToBlob(chunks: string[], mimeType: string = 'application/zip'): Blob {
+  // Convert each chunk to Uint8Array separately
+  const byteArrays: BlobPart[] = chunks.map(chunk => {
+    const byteCharacters = atob(chunk);
+    const byteNumbers = new Uint8Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    return byteNumbers as BlobPart;
+  });
+
+  // Create blob from multiple byte arrays (no string concatenation)
+  return new Blob(byteArrays, { type: mimeType });
+}
+
 export function useDownload(): UseDownloadResult {
   const [progress, setProgress] = useState<DownloadProgress | null>(null);
   const [zipBlob, setZipBlob] = useState<Blob | null>(null);
@@ -40,6 +56,7 @@ export function useDownload(): UseDownloadResult {
   const [hasPaidContent, setHasPaidContent] = useState(false);
   const [publicationName, setPublicationName] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
+  const chunksRef = useRef<string[]>([]); // For chunked transfer
 
   const reset = useCallback(() => {
     setProgress(null);
@@ -49,6 +66,7 @@ export function useDownload(): UseDownloadResult {
     setIsLoading(false);
     setHasPaidContent(false);
     setPublicationName('');
+    chunksRef.current = []; // Clear chunks
   }, []);
 
   const cancel = useCallback(() => {
@@ -110,9 +128,20 @@ export function useDownload(): UseDownloadResult {
               const data = JSON.parse(line.slice(6)) as DownloadProgress;
               setProgress(data);
 
+              // Collect chunks for chunked transfer
+              if (data.zipChunk !== undefined && data.chunkIndex !== undefined) {
+                chunksRef.current[data.chunkIndex] = data.zipChunk;
+              }
+
               // Handle completion
               if (data.status === 'complete') {
-                if (data.zipData) {
+                // Assemble chunks if we received any (no string concatenation)
+                if (chunksRef.current.length > 0) {
+                  const blob = chunksToBlob(chunksRef.current);
+                  setZipBlob(blob);
+                  chunksRef.current = []; // Clear after assembly
+                } else if (data.zipData) {
+                  // Legacy: single zipData field (for backwards compatibility)
                   const blob = base64ToBlob(data.zipData);
                   setZipBlob(blob);
                 }

@@ -42,10 +42,14 @@ export interface DownloadProgress {
   status: 'fetching' | 'processing' | 'downloading-images' | 'creating-zip' | 'complete' | 'error';
   error?: string;
   // SSE response fields
-  zipData?: string; // Base64-encoded ZIP data (sent on complete)
+  zipData?: string; // Base64-encoded ZIP data (legacy, for small files)
   filename?: string;
   publicationName?: string;
   hasPaidContent?: boolean;
+  // Chunked transfer fields (for large files)
+  zipChunk?: string;    // Base64 chunk data
+  chunkIndex?: number;  // Current chunk (0-indexed)
+  totalChunks?: number; // Total number of chunks
 }
 
 export interface ProcessedPost {

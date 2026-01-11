@@ -135,17 +135,36 @@ export async function POST(request: NextRequest) {
         // Generate filename
         const filename = generateZipFilename(subdomain);
 
-        // Convert ZIP to base64
-        const zipBase64 = Buffer.from(zipBuffer).toString('base64');
+        // Chunk the buffer BEFORE converting to base64 (avoids string length limit)
+        const BUFFER_CHUNK_SIZE = 384 * 1024; // ~512KB after base64 encoding
+        const totalChunks = Math.ceil(zipBuffer.length / BUFFER_CHUNK_SIZE);
 
-        // Phase 6: Complete - send ZIP data
+        // Phase 6: Send ZIP data in chunks
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * BUFFER_CHUNK_SIZE;
+          const end = Math.min(start + BUFFER_CHUNK_SIZE, zipBuffer.length);
+          const bufferChunk = zipBuffer.slice(start, end);
+          const chunkBase64 = bufferChunk.toString('base64');
+
+          sendProgress({
+            currentPost: `Sending data... (${i + 1}/${totalChunks})`,
+            processedPosts: posts.length,
+            totalPosts: posts.length,
+            percentage: 85 + Math.round((i / totalChunks) * 14), // 85-99%
+            status: 'creating-zip',
+            zipChunk: chunkBase64,
+            chunkIndex: i,
+            totalChunks,
+          });
+        }
+
+        // Phase 7: Complete
         sendProgress({
           currentPost: '',
           processedPosts: posts.length,
           totalPosts: posts.length,
           percentage: 100,
           status: 'complete',
-          zipData: zipBase64,
           filename,
           publicationName: publication.name,
           hasPaidContent: publication.hasPaidContent,
