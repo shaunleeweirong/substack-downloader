@@ -1,13 +1,43 @@
 # Substack Archive Downloader - Claude Instructions
 
-## Working Guidelines
+## Core Workflow
 
-1. **Think first, then act** - Read the codebase for relevant files before making changes.
-2. **Check in before major changes** - Verify the plan with the user before implementing.
-3. **Explain at a high level** - Give concise explanations of what changes were made.
-4. **Keep it simple** - Every change should be as minimal as possible. Avoid complex or sweeping changes. Simplicity is the priority.
+1. **Think first, read second** - Think through the problem and read relevant files in the codebase before taking action.
+2. **Check in before major changes** - Before making any significant changes, verify the plan with me first.
+3. **High-level explanations** - At every step, provide a concise explanation of what changes were made.
+4. **Simplicity first** - Make every task and code change as simple as possible. Avoid massive or complex changes. Every change should impact as little code as possible.
 5. **Maintain documentation** - Keep this file and architecture docs up to date.
-6. **Never speculate** - Always read files before answering questions about them. Give grounded, hallucination-free answers.
+6. **No speculation** - Never speculate about code you haven't opened. If a specific file is referenced, you MUST read it before answering. Give grounded, hallucination-free answers.
+
+## Error Handling
+
+- Include error logging so there's clear feedback on where errors occur and what they're about.
+
+## MCP Response Handling
+
+**Rule:** Any MCP response over 50 lines must be saved to `.context/mcp/`
+
+**Process:**
+1. Save the **FULL response** to file:
+```bash
+echo '{full_response}' > .context/mcp/{server}/{tool}_$(date +%s).json
+```
+2. Report **only a summary** in chat, e.g.:
+   > "Saved 200 lines to `.context/mcp/supabase/execute_sql_1704729600.json`. Found 12 tables."
+
+This keeps conversations clean while preserving full data for reference.
+
+## Testing Requirements
+
+When shipping a new feature:
+1. **Unit test** - Verify the new feature works in isolation
+2. **Regression test** - Confirm existing features still work after the change
+3. **Integration test** - Test that new + existing features work together
+
+Before marking a feature complete:
+- List which existing features could be affected
+- Run/create tests covering those interactions
+- Report test results, e.g.: "Feature B complete. Verified: Feature A still works, A+B integration passes."
 
 ---
 
@@ -121,3 +151,28 @@ Downloaded ZIP contains:
 - **Types** (`src/lib/substack/types.ts`): Added `zipChunk`, `chunkIndex`, `totalChunks` fields to `DownloadProgress` interface
 
 **Status**: Tested and working with large publications.
+
+### January 2026 - Chrome Extension for Cookie Extraction
+
+**Problem**: The bookmarklet for extracting Substack cookies was unreliable due to browser security restrictions blocking `javascript:` URLs in modern browsers.
+
+**Solution implemented**:
+- **Chrome Extension** (`extension/`): Created a Manifest V3 Chrome extension that:
+  - Reads `substack.sid` from `*.substack.com` domains
+  - Reads `connect.sid` from custom domains (e.g., lennysnewsletter.com)
+  - Provides one-click "Open Downloader with Cookie" button
+  - Provides "Copy to Clipboard" as fallback
+- **Web App Integration** (`src/components/cookie-input.tsx`):
+  - Added `parseHashParams()` to read cookie data from URL hash (`#sid=...&sidType=...`)
+  - Auto-expands cookie section and shows success message when loaded from extension
+  - Clears hash after reading for security
+  - Updated instructions to reference extension instead of bookmarklet
+
+**Files created**:
+- `extension/manifest.json` - MV3 extension config
+- `extension/popup.html` - Simple popup UI
+- `extension/popup.js` - Cookie extraction logic
+- `extension/icons/` - 16px, 48px, 128px icons
+- `extension/README.md` - Installation instructions
+
+**Status**: Extension loads correctly in Chrome. Requires testing on actual Substack domains.

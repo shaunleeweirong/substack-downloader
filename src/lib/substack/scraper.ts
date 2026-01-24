@@ -263,6 +263,53 @@ export async function fetchPublicationInfo(subdomain: string, authCookie?: strin
   };
 }
 
+/**
+ * Fetch publication info from a custom domain URL (e.g., lennysnewsletter.com)
+ * @param url - The full URL of the custom domain (e.g., https://lennysnewsletter.com)
+ * @param identifier - The identifier to use for the publication (domain name)
+ * @param authCookie - Optional auth cookie for paid content
+ */
+export async function fetchPublicationInfoByUrl(url: string, identifier: string, authCookie?: string): Promise<SubstackPublication> {
+  const parsedUrl = new URL(url);
+  const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+
+  const response = await rateLimiter.fetch(baseUrl, {
+    headers: buildHeaders(authCookie),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch publication: ${response.status}`);
+  }
+
+  const html = await response.text();
+  const $ = cheerio.load(html);
+
+  // Extract publication info from meta tags and page content
+  const name = $('meta[property="og:site_name"]').attr('content') ||
+               $('title').text().split('|')[0]?.trim() ||
+               identifier;
+
+  const description = $('meta[property="og:description"]').attr('content') ||
+                      $('meta[name="description"]').attr('content') || '';
+
+  const author = $('meta[name="author"]').attr('content') || '';
+
+  // Check for paid content indicators
+  const hasPaidContent = html.includes('subscription') ||
+                         html.includes('subscribe') ||
+                         $('[data-component-name="SubscribeWidget"]').length > 0;
+
+  return {
+    name,
+    subdomain: identifier, // Use the identifier (domain) in place of subdomain
+    description,
+    author,
+    url: baseUrl,
+    baseUrl,
+    hasPaidContent,
+  };
+}
+
 export async function fetchArchivePostList(baseUrl: string, authCookie?: string): Promise<PostListItem[]> {
   const posts: PostListItem[] = [];
   let offset = 0;

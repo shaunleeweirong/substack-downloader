@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { isValidSubstackUrl, extractSubdomain } from '@/lib/utils/url-validator';
-import { fetchPublicationInfo, fetchAllPosts } from '@/lib/substack/scraper';
+import { isValidUrl, isSubstackDomain, extractSubdomain, extractIdentifier } from '@/lib/utils/url-validator';
+import { fetchPublicationInfo, fetchPublicationInfoByUrl, fetchAllPosts } from '@/lib/substack/scraper';
 import { processAllPosts } from '@/lib/substack/parser';
 import { downloadAllPostImages } from '@/lib/substack/image-handler';
 import { buildArchiveZip, generateZipFilename } from '@/lib/archive/zip-builder';
@@ -47,16 +47,19 @@ export async function POST(request: NextRequest) {
 
         console.log(`[Download] Starting: ${url}${authCookie ? ' (authenticated)' : ''}`);
 
-        if (!isValidSubstackUrl(url)) {
-          sendError('Invalid Substack URL');
+        if (!isValidUrl(url)) {
+          sendError('Invalid URL. Please enter a valid https:// URL.');
           return;
         }
 
-        const subdomain = extractSubdomain(url);
-        if (!subdomain) {
-          sendError('Could not extract subdomain from URL');
+        const identifier = extractIdentifier(url);
+        if (!identifier) {
+          sendError('Could not extract identifier from URL');
           return;
         }
+
+        const isSubstack = isSubstackDomain(url);
+        const subdomain = isSubstack ? extractSubdomain(url) : null;
 
         // Phase 1: Fetch publication info
         sendProgress({
@@ -67,7 +70,10 @@ export async function POST(request: NextRequest) {
           status: 'fetching',
         });
 
-        const publication = await fetchPublicationInfo(subdomain, authCookie || undefined);
+        // Use appropriate function based on URL type
+        const publication = isSubstack && subdomain
+          ? await fetchPublicationInfo(subdomain, authCookie || undefined)
+          : await fetchPublicationInfoByUrl(url, identifier, authCookie || undefined);
         console.log(`[Download] Publication: ${publication.name}`);
 
         // Phase 2: Fetch all posts with progress updates
@@ -81,7 +87,7 @@ export async function POST(request: NextRequest) {
 
         const posts = await fetchAllPosts(
           publication.baseUrl,
-          subdomain,  // Pass subdomain for authenticated API calls to substack.com
+          subdomain || identifier,  // Pass subdomain for substack.com, identifier for custom domains
           { startDate: startDate || null, endDate: endDate || null },
           authCookie || undefined,
           (current, total, title) => {
@@ -140,8 +146,8 @@ export async function POST(request: NextRequest) {
           images,
         });
 
-        // Generate filename
-        const filename = generateZipFilename(subdomain);
+        // Generate filename using identifier (subdomain or domain)
+        const filename = generateZipFilename(identifier);
 
         // Chunk the buffer BEFORE converting to base64 (avoids string length limit)
         const BUFFER_CHUNK_SIZE = 384 * 1024; // ~512KB after base64 encoding

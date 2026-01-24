@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Substack Cookie Extractor</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 320px;
+      padding: 16px;
+      background: #fafafa;
+      color: #1a1a1a;
+    }
+
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #ff6719;
+    }
+
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    .status.found {
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
+    }
+
+    .status.not-found {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+    }
+
+    .status.loading {
+      background: #f5f5f5;
+      border: 1px solid #d4d4d4;
+      color: #525252;
+    }
+
+    .cookie-info {
+      margin-top: 8px;
+      padding: 8px;
+      background: white;
+      border-radius: 4px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .cookie-label {
+      font-weight: 600;
+      color: #525252;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .cookie-value {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      color: #1a1a1a;
+      max-height: 60px;
+      overflow-y: auto;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: #ff6719;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #e55a14;
+    }
+
+    .btn-secondary {
+      background: #e5e5e5;
+      color: #1a1a1a;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #d4d4d4;
+    }
+
+    .success-message {
+      color: #065f46;
+      font-size: 12px;
+      text-align: center;
+      margin-top: 8px;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #737373;
+      margin-top: 12px;
+      line-height: 1.4;
+    }
+
+    .domain {
+      font-weight: 500;
+      color: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+  <h1>Substack Cookie Extractor</h1>
+
+  <div id="status" class="status loading">
+    Checking for cookies...
+  </div>
+
+  <div class="buttons">
+    <button id="copyBtn" class="btn-primary" disabled>
+      Copy to Clipboard
+    </button>
+    <button id="openBtn" class="btn-secondary" disabled>
+      Open Downloader with Cookie
+    </button>
+  </div>
+
+  <div id="successMessage" class="success-message" style="display: none;">
+    Copied to clipboard!
+  </div>
+
+  <p class="hint">
+    Visit a Substack publication while logged in, then click this extension to extract your authentication cookies.
+  </p>
+
+  <script src="popup.js"></script>
+</body>
+</html>
