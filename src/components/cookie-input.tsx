@@ -149,7 +149,7 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
                 <li>
                   Install the{' '}
                   <a
-                    href="https://github.com/your-repo/substack-downloader/tree/main/extension#installation"
+                    href="https://github.com/shaunleeweirong/substack-downloader/tree/main/extension#installation"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 underline"
