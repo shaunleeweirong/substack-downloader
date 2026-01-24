@@ -8,10 +8,6 @@ interface CookieInputProps {
   disabled?: boolean;
 }
 
-// Bookmarklet that extracts BOTH substack.sid and connect.sid cookies
-// Works on both substack.com hosted publications and custom domains
-const BOOKMARKLET_CODE = `javascript:(function(){var cookies={};document.cookie.split(';').forEach(function(c){var parts=c.trim().split('=');var name=parts[0];if(name==='substack.sid'||name==='connect.sid'||name==='substack.lli'){cookies[name]=parts.slice(1).join('=')}});if(Object.keys(cookies).length>0){var sid=cookies['substack.sid']||cookies['connect.sid'];var sidName=cookies['substack.sid']?'substack.sid':'connect.sid';var msg='Found cookies:\\n\\n'+sidName+' (Session ID):\\n'+sid+'\\n\\n';if(cookies['substack.lli']){msg+='substack.lli (optional):\\n'+cookies['substack.lli']+'\\n\\n'}alert(msg)}else{alert('No Substack cookies found. Make sure you are logged in.')}})()`;
-
 // Parse initial value to extract cookie values (handles both substack.sid and connect.sid)
 function parseInitialValue(value: string): { sid: string; sidType: 'substack' | 'connect' | ''; lli: string } {
   let sid = '';
@@ -34,14 +30,67 @@ function parseInitialValue(value: string): { sid: string; sidType: 'substack' | 
   return { sid, sidType, lli };
 }
 
-export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+// Parse URL hash for cookie data from extension
+function parseHashParams(): { sid?: string; sidType?: 'substack' | 'connect'; lli?: string } | null {
+  if (typeof window === 'undefined') return null;
 
-  // Initialize state from value prop
-  const initialParsed = parseInitialValue(value);
-  const [sidValue, setSidValue] = useState(initialParsed.sid);
-  const [sidType, setSidType] = useState<'substack' | 'connect'>(initialParsed.sidType || 'substack');
-  const [lliValue, setLliValue] = useState(initialParsed.lli);
+  const hash = window.location.hash.slice(1); // Remove the #
+  if (!hash) return null;
+
+  try {
+    const params = new URLSearchParams(hash);
+    const sid = params.get('sid');
+    const sidType = params.get('sidType') as 'substack' | 'connect' | null;
+    const lli = params.get('lli');
+
+    if (sid && sidType) {
+      return { sid, sidType, lli: lli || undefined };
+    }
+  } catch {
+    // Invalid hash format, ignore
+  }
+  return null;
+}
+
+// Get initial values from hash or prop
+function getInitialState(value: string) {
+  const hashData = parseHashParams();
+  if (hashData && hashData.sid) {
+    return {
+      sid: hashData.sid,
+      sidType: hashData.sidType || 'substack' as const,
+      lli: hashData.lli || '',
+      fromExtension: true,
+      isExpanded: true
+    };
+  }
+  const parsed = parseInitialValue(value);
+  return {
+    sid: parsed.sid,
+    sidType: parsed.sidType || 'substack' as const,
+    lli: parsed.lli,
+    fromExtension: false,
+    isExpanded: false
+  };
+}
+
+export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
+  // Initialize all state from hash (if present) or value prop
+  const initial = getInitialState(value);
+  const [isExpanded, setIsExpanded] = useState(initial.isExpanded);
+  const [fromExtension] = useState(initial.fromExtension);
+  const [sidValue, setSidValue] = useState(initial.sid);
+  const [sidType, setSidType] = useState<'substack' | 'connect'>(initial.sidType);
+  const [lliValue, setLliValue] = useState(initial.lli);
+
+  // Clear hash on mount if we loaded from extension (for security)
+  useEffect(() => {
+    if (initial.fromExtension && typeof window !== 'undefined' && window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Combine values and notify parent
   const updateCombinedValue = useCallback(() => {
@@ -82,6 +131,15 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
       {isExpanded && (
         <div className="mt-3 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
           <div className="space-y-4">
+            {/* Success message when loaded from extension */}
+            {fromExtension && (
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <p className="text-sm text-green-700 dark:text-green-400">
+                  Cookie loaded from extension! You can now download your paid content.
+                </p>
+              </div>
+            )}
+
             {/* Instructions */}
             <div className="text-sm text-zinc-600 dark:text-zinc-400">
               <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-2">
@@ -89,19 +147,20 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
               </p>
               <ol className="list-decimal ml-4 space-y-1">
                 <li>
-                  Drag this button to your bookmarks bar:{' '}
+                  Install the{' '}
                   <a
-                    href={BOOKMARKLET_CODE}
-                    onClick={(e) => e.preventDefault()}
-                    draggable="true"
-                    className="inline-block px-2 py-1 text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded border border-orange-300 dark:border-orange-700 cursor-move hover:bg-orange-200 dark:hover:bg-orange-900/50"
+                    href="https://github.com/your-repo/substack-downloader/tree/main/extension#installation"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 underline"
                   >
-                    Get Substack Cookies
+                    Substack Cookie Extractor
                   </a>
+                  {' '}Chrome extension
                 </li>
                 <li>Go to any Substack page while logged in</li>
-                <li>Click the bookmarklet - it will show your session cookie</li>
-                <li>Copy the value into the field below</li>
+                <li>Click the extension icon in your toolbar</li>
+                <li>Click &quot;Open Downloader with Cookie&quot; or copy and paste below</li>
               </ol>
             </div>
 
@@ -185,7 +244,7 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
             {/* Manual instructions fallback */}
             <details className="text-xs text-zinc-500 dark:text-zinc-500">
               <summary className="cursor-pointer hover:text-zinc-600 dark:hover:text-zinc-400">
-                Bookmarklet not working? Get cookies manually
+                Extension not working? Get cookies manually
               </summary>
               <div className="mt-2 p-2 bg-zinc-100 dark:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400">
                 <ol className="list-decimal ml-4 space-y-1">

@@ -17,6 +17,7 @@ let extractedCookies = {
   sidDomain: null,
   lli: null
 };
+let currentTabUrl = null;
 
 // DOM elements
 const statusEl = document.getElementById('status');
@@ -42,6 +43,9 @@ async function detectCookies() {
     const url = new URL(tab.url);
     const currentDomain = url.hostname;
 
+    // Store the current tab URL for use in handleOpenDownloader
+    currentTabUrl = tab.url;
+
     // Check if we're on a Substack domain or potential custom domain
     const isSubstackDomain = currentDomain.endsWith('.substack.com') || currentDomain === 'substack.com';
 
@@ -64,15 +68,16 @@ async function detectCookies() {
     let foundLli = null;
 
     for (const cookie of allCookies) {
-      if (cookie.name === COOKIE_NAMES.SUBSTACK_SID && cookie.value) {
+      if (cookie.name === COOKIE_NAMES.CONNECT_SID && cookie.value) {
+        // Always prefer connect.sid when present (custom domains)
         foundSid = cookie.value;
-        foundSidType = 'substack';
+        foundSidType = 'connect';
         foundSidDomain = cookie.domain;
-      } else if (cookie.name === COOKIE_NAMES.CONNECT_SID && cookie.value) {
-        // Prefer substack.sid if we already found it, but use connect.sid for custom domains
-        if (!foundSid || !isSubstackDomain) {
+      } else if (cookie.name === COOKIE_NAMES.SUBSTACK_SID && cookie.value) {
+        // Fall back to substack.sid if connect.sid not found
+        if (!foundSid) {
           foundSid = cookie.value;
-          foundSidType = 'connect';
+          foundSidType = 'substack';
           foundSidDomain = cookie.domain;
         }
       } else if (cookie.name === COOKIE_NAMES.SUBSTACK_LLI && cookie.value) {
@@ -153,6 +158,9 @@ function handleOpenDownloader() {
   params.set('sidType', extractedCookies.sidType);
   if (extractedCookies.lli) {
     params.set('lli', extractedCookies.lli);
+  }
+  if (currentTabUrl) {
+    params.set('url', currentTabUrl);
   }
 
   // Open downloader with cookie data in hash
