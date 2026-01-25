@@ -1,3 +1,5 @@
+export type OutputFormat = 'markdown' | 'epub';
+
 export interface SubstackPost {
   slug: string;
   title: string;

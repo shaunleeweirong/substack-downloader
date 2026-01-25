@@ -5,13 +5,15 @@ import { fetchPublicationInfo, fetchPublicationInfoByUrl, fetchAllPosts } from '
 import { processAllPosts } from '@/lib/substack/parser';
 import { downloadAllPostImages } from '@/lib/substack/image-handler';
 import { buildArchiveZip, generateZipFilename } from '@/lib/archive/zip-builder';
-import { DownloadProgress } from '@/lib/substack/types';
+import { buildEPUB, generateEpubFilename } from '@/lib/ebook/epub-builder';
+import { DownloadProgress, OutputFormat } from '@/lib/substack/types';
 
 const requestSchema = z.object({
   url: z.string().url(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
   authCookie: z.string().nullable().optional(),
+  outputFormat: z.enum(['markdown', 'epub']).optional().default('markdown'),
 });
 
 export async function POST(request: NextRequest) {
@@ -43,9 +45,9 @@ export async function POST(request: NextRequest) {
       try {
         // Parse and validate request
         const body = await request.json();
-        const { url, startDate, endDate, authCookie } = requestSchema.parse(body);
+        const { url, startDate, endDate, authCookie, outputFormat } = requestSchema.parse(body);
 
-        console.log(`[Download] Starting: ${url}${authCookie ? ' (authenticated)' : ''}`);
+        console.log(`[Download] Starting: ${url}${authCookie ? ' (authenticated)' : ''} [format: ${outputFormat}]`);
 
         if (!isValidUrl(url)) {
           sendError('Invalid URL. Please enter a valid https:// URL.');
@@ -131,33 +133,39 @@ export async function POST(request: NextRequest) {
 
         const images = await downloadAllPostImages(processedPosts, authCookie || undefined);
 
-        // Phase 5: Build ZIP archive
+        // Phase 5: Build archive (ZIP or EPUB)
         sendProgress({
-          currentPost: 'Creating archive...',
+          currentPost: outputFormat === 'epub' ? 'Creating eBook...' : 'Creating archive...',
           processedPosts: posts.length,
           totalPosts: posts.length,
           percentage: 85,
           status: 'creating-zip',
         });
 
-        const zipBuffer = await buildArchiveZip({
-          publication,
-          posts: processedPosts,
-          images,
-        });
+        let outputBuffer: Buffer;
+        let filename: string;
 
-        // Generate filename using identifier (subdomain or domain)
-        const filename = generateZipFilename(identifier);
+        if (outputFormat === 'epub') {
+          outputBuffer = await buildEPUB(publication, processedPosts, images);
+          filename = generateEpubFilename(identifier);
+        } else {
+          outputBuffer = await buildArchiveZip({
+            publication,
+            posts: processedPosts,
+            images,
+          });
+          filename = generateZipFilename(identifier);
+        }
 
         // Chunk the buffer BEFORE converting to base64 (avoids string length limit)
         const BUFFER_CHUNK_SIZE = 384 * 1024; // ~512KB after base64 encoding
-        const totalChunks = Math.ceil(zipBuffer.length / BUFFER_CHUNK_SIZE);
+        const totalChunks = Math.ceil(outputBuffer.length / BUFFER_CHUNK_SIZE);
 
-        // Phase 6: Send ZIP data in chunks
+        // Phase 6: Send data in chunks
         for (let i = 0; i < totalChunks; i++) {
           const start = i * BUFFER_CHUNK_SIZE;
-          const end = Math.min(start + BUFFER_CHUNK_SIZE, zipBuffer.length);
-          const bufferChunk = zipBuffer.slice(start, end);
+          const end = Math.min(start + BUFFER_CHUNK_SIZE, outputBuffer.length);
+          const bufferChunk = outputBuffer.slice(start, end);
           const chunkBase64 = bufferChunk.toString('base64');
 
           sendProgress({

@@ -4,11 +4,13 @@ import { useState, useCallback } from 'react';
 import { UrlInput } from '@/components/url-input';
 import { DateRangeFilter, DateRange } from '@/components/date-range-filter';
 import { CookieInput } from '@/components/cookie-input';
+import { FormatSelector } from '@/components/format-selector';
 import { ProgressBar } from '@/components/progress-bar';
 import { DownloadButton } from '@/components/download-button';
 import { ErrorMessage } from '@/components/error-message';
 import { PaidContentNotice } from '@/components/paid-content-notice';
 import { useDownload } from '@/hooks/use-download';
+import { OutputFormat } from '@/lib/substack/types';
 
 export default function Home() {
   const {
@@ -26,13 +28,14 @@ export default function Home() {
 
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: null, endDate: null });
   const [authCookie, setAuthCookie] = useState('');
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>('markdown');
 
   const handleDateRangeChange = useCallback((range: DateRange) => {
     setDateRange(range);
   }, []);
 
   const handleSubmit = (url: string) => {
-    startDownload(url, dateRange, authCookie || undefined);
+    startDownload(url, dateRange, authCookie || undefined, outputFormat);
   };
 
   return (
@@ -65,6 +68,13 @@ export default function Home() {
         <CookieInput
           value={authCookie}
           onChange={setAuthCookie}
+          disabled={isLoading || !!zipBlob}
+        />
+
+        {/* Format Selector */}
+        <FormatSelector
+          value={outputFormat}
+          onChange={setOutputFormat}
           disabled={isLoading || !!zipBlob}
         />
 

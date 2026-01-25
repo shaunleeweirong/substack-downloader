@@ -1,11 +1,15 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { DownloadProgress } from '@/lib/substack/types';
+import { DownloadProgress, OutputFormat } from '@/lib/substack/types';
 
 interface DateRange {
   startDate: string | null;
   endDate: string | null;
+}
+
+function getMimeType(format: OutputFormat): string {
+  return format === 'epub' ? 'application/epub+zip' : 'application/zip';
 }
 
 interface UseDownloadResult {
@@ -16,7 +20,7 @@ interface UseDownloadResult {
   isLoading: boolean;
   hasPaidContent: boolean;
   publicationName: string;
-  startDownload: (url: string, dateRange?: DateRange, authCookie?: string) => Promise<void>;
+  startDownload: (url: string, dateRange?: DateRange, authCookie?: string, outputFormat?: OutputFormat) => Promise<void>;
   cancel: () => void;
   reset: () => void;
 }
@@ -78,7 +82,7 @@ export function useDownload(): UseDownloadResult {
     setProgress(null);
   }, []);
 
-  const startDownload = useCallback(async (url: string, dateRange?: DateRange, authCookie?: string) => {
+  const startDownload = useCallback(async (url: string, dateRange?: DateRange, authCookie?: string, outputFormat: OutputFormat = 'markdown') => {
     reset();
     setIsLoading(true);
 
@@ -94,6 +98,7 @@ export function useDownload(): UseDownloadResult {
           startDate: dateRange?.startDate || null,
           endDate: dateRange?.endDate || null,
           authCookie: authCookie || null,
+          outputFormat,
         }),
         signal: controller.signal,
       });
@@ -136,14 +141,18 @@ export function useDownload(): UseDownloadResult {
 
               // Handle completion
               if (data.status === 'complete') {
+                // Determine MIME type from filename
+                const isEpub = data.filename?.endsWith('.epub');
+                const mimeType = isEpub ? 'application/epub+zip' : 'application/zip';
+
                 // Assemble chunks if we received any (no string concatenation)
                 if (chunksRef.current.length > 0) {
-                  const blob = chunksToBlob(chunksRef.current);
+                  const blob = chunksToBlob(chunksRef.current, mimeType);
                   setZipBlob(blob);
                   chunksRef.current = []; // Clear after assembly
                 } else if (data.zipData) {
                   // Legacy: single zipData field (for backwards compatibility)
-                  const blob = base64ToBlob(data.zipData);
+                  const blob = base64ToBlob(data.zipData, mimeType);
                   setZipBlob(blob);
                 }
                 if (data.filename) {
