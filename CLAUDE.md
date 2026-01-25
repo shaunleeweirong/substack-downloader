@@ -8,6 +8,7 @@
 4. **Simplicity first** - Make every task and code change as simple as possible. Avoid massive or complex changes. Every change should impact as little code as possible.
 5. **Maintain documentation** - Keep this file and architecture docs up to date.
 6. **No speculation** - Never speculate about code you haven't opened. If a specific file is referenced, you MUST read it before answering. Give grounded, hallucination-free answers.
+7. **No AI attribution** - Never include Claude/AI co-author lines, attributions, or mentions in commit messages, code comments, or documentation.
 
 ## Error Handling
 
