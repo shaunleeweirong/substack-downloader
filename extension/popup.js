@@ -98,14 +98,20 @@ async function detectCookies() {
       const cookieTypeName = foundSidType === 'substack' ? 'substack.sid' : 'connect.sid';
       let statusHtml = `<strong>Found authentication cookie!</strong>`;
       statusHtml += `<div class="cookie-info">`;
+      statusHtml += `<div class="cookie-label-row">`;
       statusHtml += `<span class="cookie-label">${cookieTypeName} (from ${foundSidDomain})</span>`;
-      statusHtml += `<div class="cookie-value">${truncateValue(foundSid)}</div>`;
+      statusHtml += `<button class="cookie-toggle" data-cookie-id="sid">Show</button>`;
+      statusHtml += `</div>`;
+      statusHtml += `<div class="cookie-value masked" id="cookie-sid" data-value="${escapeAttr(foundSid)}">••••••••</div>`;
       statusHtml += `</div>`;
 
       if (foundLli) {
         statusHtml += `<div class="cookie-info">`;
+        statusHtml += `<div class="cookie-label-row">`;
         statusHtml += `<span class="cookie-label">substack.lli (optional)</span>`;
-        statusHtml += `<div class="cookie-value">${foundLli}</div>`;
+        statusHtml += `<button class="cookie-toggle" data-cookie-id="lli">Show</button>`;
+        statusHtml += `</div>`;
+        statusHtml += `<div class="cookie-value masked" id="cookie-lli" data-value="${escapeAttr(foundLli)}">••••••••</div>`;
         statusHtml += `</div>`;
       }
 
@@ -127,6 +133,13 @@ async function detectCookies() {
 function setupEventListeners() {
   copyBtn.addEventListener('click', handleCopy);
   openBtn.addEventListener('click', handleOpenDownloader);
+
+  // Attach toggle handlers to show/hide buttons
+  document.querySelectorAll('.cookie-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      toggleCookieVisibility(btn.dataset.cookieId);
+    });
+  });
 }
 
 async function handleCopy() {
@@ -197,9 +210,23 @@ function showSuccess() {
   }, 2000);
 }
 
-function truncateValue(value) {
-  if (value.length > 50) {
-    return value.substring(0, 25) + '...' + value.substring(value.length - 20);
+function toggleCookieVisibility(cookieId) {
+  const valueEl = document.getElementById(`cookie-${cookieId}`);
+  const toggleBtn = document.querySelector(`.cookie-toggle[data-cookie-id="${cookieId}"]`);
+  if (!valueEl || !toggleBtn) return;
+
+  const isMasked = valueEl.classList.contains('masked');
+  if (isMasked) {
+    valueEl.textContent = valueEl.dataset.value;
+    valueEl.classList.remove('masked');
+    toggleBtn.textContent = 'Hide';
+  } else {
+    valueEl.textContent = '••••••••';
+    valueEl.classList.add('masked');
+    toggleBtn.textContent = 'Show';
   }
-  return value;
+}
+
+function escapeAttr(value) {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

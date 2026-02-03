@@ -67,12 +67,41 @@
       margin-bottom: 4px;
     }
 
+    .cookie-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .cookie-toggle {
+      background: none;
+      border: 1px solid #d4d4d4;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 10px;
+      color: #525252;
+      cursor: pointer;
+      width: auto;
+      font-weight: 400;
+    }
+
+    .cookie-toggle:hover {
+      background: #f5f5f5;
+      border-color: #a3a3a3;
+    }
+
     .cookie-value {
       font-family: 'Monaco', 'Menlo', monospace;
       font-size: 11px;
       color: #1a1a1a;
       max-height: 60px;
       overflow-y: auto;
+    }
+
+    .cookie-value.masked {
+      color: #a3a3a3;
+      letter-spacing: 2px;
     }
 
     .buttons {

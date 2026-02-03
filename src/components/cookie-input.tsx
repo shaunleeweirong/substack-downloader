@@ -82,6 +82,8 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
   const [sidValue, setSidValue] = useState(initial.sid);
   const [sidType, setSidType] = useState<'substack' | 'connect'>(initial.sidType);
   const [lliValue, setLliValue] = useState(initial.lli);
+  const [showSid, setShowSid] = useState(false);
+  const [showLli, setShowLli] = useState(false);
 
   // Clear hash on mount if we loaded from extension (for security)
   useEffect(() => {
@@ -205,15 +207,35 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
                     ? 'Use substack.sid for publications on *.substack.com'
                     : 'Use connect.sid for publications with custom domains (e.g., lennysnewsletter.com)'}
                 </p>
-                <input
-                  id="session-cookie"
-                  type="text"
-                  value={sidValue}
-                  onChange={(e) => setSidValue(e.target.value)}
-                  placeholder="s%3A... or long alphanumeric string"
-                  disabled={disabled}
-                  className={inputClassName}
-                />
+                <div className="relative">
+                  <input
+                    id="session-cookie"
+                    type={showSid ? 'text' : 'password'}
+                    value={sidValue}
+                    onChange={(e) => setSidValue(e.target.value)}
+                    placeholder="s%3A... or long alphanumeric string"
+                    disabled={disabled}
+                    className={`${inputClassName} pr-10`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSid(!showSid)}
+                    disabled={disabled}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                    aria-label={showSid ? 'Hide cookie value' : 'Show cookie value'}
+                  >
+                    {showSid ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.59 6.59m7.532 7.532l3.29 3.29M3 3l18 18" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Logged-in indicator - Optional */}
@@ -225,15 +247,35 @@ export function CookieInput({ value, onChange, disabled }: CookieInputProps) {
                   substack.lli
                   <span className="font-normal text-zinc-500 ml-1">(optional)</span>
                 </label>
-                <input
-                  id="substack-lli"
-                  type="text"
-                  value={lliValue}
-                  onChange={(e) => setLliValue(e.target.value)}
-                  placeholder="Usually a number like 1704067200000"
-                  disabled={disabled}
-                  className={inputClassName}
-                />
+                <div className="relative">
+                  <input
+                    id="substack-lli"
+                    type={showLli ? 'text' : 'password'}
+                    value={lliValue}
+                    onChange={(e) => setLliValue(e.target.value)}
+                    placeholder="Usually a number like 1704067200000"
+                    disabled={disabled}
+                    className={`${inputClassName} pr-10`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLli(!showLli)}
+                    disabled={disabled}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+                    aria-label={showLli ? 'Hide cookie value' : 'Show cookie value'}
+                  >
+                    {showLli ? (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.59 6.59m7.532 7.532l3.29 3.29M3 3l18 18" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
